@@ -1,0 +1,104 @@
+Master CODE
+
+#include <HardwareSerial.h>
+
+#define DE 4
+#define RE 4
+#define VOLTAGE_SENSOR_PIN 34  // Battery Voltage Sensor (0-25V) connected to GPIO 34
+#define CURRENT_SENSOR_PIN 35  // ACS712-20A Current Sensor connected to GPIO 35
+
+HardwareSerial RS485Serial(2);  // UART2 (RX=16, TX=17)
+
+void setup() {
+  Serial.begin(115200);
+  RS485Serial.begin(9600, SERIAL_8N1, 16, 17);
+
+  pinMode(DE, OUTPUT);
+  pinMode(RE, OUTPUT);
+
+  digitalWrite(DE, HIGH);  // Enable transmission mode
+  digitalWrite(RE, HIGH);
+}
+
+void loop() {
+  // --- Read Battery Voltage ---
+  int rawVoltage = analogRead(VOLTAGE_SENSOR_PIN);
+  float batteryVoltage = rawVoltage * (3.3 / 4095.0) * 3.75;  // Assuming 5x voltage divider
+
+  // --- Calculate SOC (State of Charge) ---
+  int SOC = 0;
+  if (batteryVoltage > 12.6) SOC = 100;
+  else if (batteryVoltage > 11 && batteryVoltage <= 12.6) SOC = 80;
+  else if (batteryVoltage > 10 && batteryVoltage <= 11) SOC = 50;
+  else if (batteryVoltage > 9 && batteryVoltage <= 10) SOC = 20;
+  else SOC = 0;
+
+  // --- Print Readings ---
+  Serial.print("Voltage: ");
+  Serial.print(batteryVoltage, 2);
+  Serial.print("V, SOC: ");
+  Serial.print(SOC);
+  Serial.println("%");
+
+  // --- Send SOC to Slave via RS-485 ---
+  RS485Serial.write(SOC);
+
+  delay(10000);  // Wait 2 seconds before next reading
+}
+
+
+
+SLAVE CODE
+
+#include <HardwareSerial.h>
+
+#define LIGHT 18  // Light Relay
+#define FAN 19    // Fan Relay
+
+#define DE_RE 4  // RE/DE pin for RS-485
+
+HardwareSerial RS485Serial(2);  // UART2 (RX=16, TX=17)
+
+void setup() {
+  Serial.begin(115200);
+  RS485Serial.begin(9600, SERIAL_8N1, 16, 17); // Same baud rate as master
+
+  pinMode(LIGHT, OUTPUT);
+  pinMode(FAN, OUTPUT);
+  pinMode(DE_RE, OUTPUT);
+
+  digitalWrite(DE_RE, LOW);  // Set to receive mode
+
+  // Ensure all relays are OFF initially (Active HIGH Relays)
+  digitalWrite(LIGHT, LOW);
+  digitalWrite(FAN, LOW);
+
+  Serial.println("Slave Ready to Receive...");
+}
+
+void loop() {
+  if (RS485Serial.available()) {
+    int SOC = RS485Serial.read();  // Read SOC from Master
+    Serial.print("Received SOC: ");
+    Serial.println(SOC);
+
+    // Relay control logic based on SOC
+    if (SOC >= 80) {  
+      digitalWrite(LIGHT, HIGH);  // Light ON
+      digitalWrite(FAN, HIGH);    // Fan ON
+      Serial.println("Light and Fan ON");
+    } 
+    else if (SOC >= 50) {  
+      digitalWrite(LIGHT, HIGH);  // Light ON
+      digitalWrite(FAN, LOW);     // Fan OFF
+      Serial.println("Only Light ON");
+    } 
+    else {  
+      digitalWrite(LIGHT, LOW);  // Light OFF
+      digitalWrite(FAN, LOW);    // Fan OFF
+      Serial.println("All OFF");
+    }
+  }
+
+  delay(2000); // Small delay for stability
+}
