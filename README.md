@@ -24,4 +24,5 @@ Technologies Used:
 
 2. Blynk IoT, ThingSpeak
 
-3. RS-485 Serial Communication 
+3. RS-485 Serial Communication
+   
